@@ -94,7 +94,7 @@ def abs_sobel_thresh(img, is_gray=True, orient='x', sobel_kernel=3, sob_thresh=(
 
     gray = np.copy(img)
     if is_gray == False:
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 2) Take the derivative in x or y given orient = 'x' or 'y'
     if (orient == 'x'):
         sobel = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
@@ -121,7 +121,7 @@ def mag_thresh(img, is_gray=True, sobel_kernel=3, mag_thresh=(0, 255)):
     # 1) Convert to grayscale
     gray = np.copy(img)
     if is_gray == False:
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 2) Take the gradient in x and y separately
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
@@ -146,7 +146,7 @@ def dir_threshold(img, is_gray=True, sobel_kernel=3, thresh=(0, np.pi / 2)):
     # 1) Convert to grayscale
     gray = np.copy(img)
     if is_gray == False:
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 2) Take the gradient in x and y separately
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
@@ -167,7 +167,7 @@ def dir_threshold(img, is_gray=True, sobel_kernel=3, thresh=(0, np.pi / 2)):
 # Use exclusive lower bound (>) and inclusive upper (<=)
 def hls_select(img, thresh=(0, 255)):
     # 1) Convert to HLS color space
-    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+    hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
     # 2) Apply a threshold to the S channel
     S = hls[:,:,2]
     # 3) Return a binary image of threshold result
@@ -325,6 +325,7 @@ def search_around_poly(binary_warped, left_fit, right_fit):
     # The quiz grader expects 100 here, but feel free to tune on your own!
     margin = 100
 
+
     # Grab activated pixels
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
@@ -376,6 +377,14 @@ def search_around_poly(binary_warped, left_fit, right_fit):
     cv2.fillPoly(window_img, np.int_([right_line_pts]), (0, 255, 0))
     result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
 
+    bwn_window_img = np.zeros_like(out_img)
+    left_lane_line_window = np.array([np.flipud(np.transpose(np.vstack([left_fitx + margin, ploty])))])
+    right_lane_line_window = np.array([np.transpose(np.vstack([right_fitx - margin, ploty]))])
+    lane_line_pts = np.hstack((left_lane_line_window, right_lane_line_window))
+
+    cv2.fillPoly(bwn_window_img, np.int_([lane_line_pts]), (255, 0, 0))
+    result = cv2.addWeighted(result, 1, bwn_window_img, 0.3, 0)
+
     # Plot the polynomial lines onto the image
     plt.plot(left_fitx, ploty, color='yellow')
     plt.plot(right_fitx, ploty, color='yellow')
@@ -414,6 +423,37 @@ def search_around_poly(binary_warped, left_fit, right_fit):
 #     return ploty, left_fit, right_fit
 
 
+def generate_data(ym_per_pix, xm_per_pix):
+    '''
+    Generates fake data to use for calculating lane curvature.
+    In your own project, you'll ignore this function and instead
+    feed in the output of your lane detection algorithm to
+    the lane curvature calculation.
+    '''
+    # Set random seed number so results are consistent for grader
+    # Comment this out if you'd like to see results on different random data!
+    np.random.seed(0)
+    # Generate some fake data to represent lane-line pixels
+    ploty = np.linspace(0, 719, num=720)  # to cover same y-range as image
+    quadratic_coeff = 3e-4  # arbitrary quadratic coefficient
+    # For each y position generate random x position within +/-50 pix
+    # of the line base position in each case (x=200 for left, and x=900 for right)
+    leftx = np.array([200 + (y ** 2) * quadratic_coeff + np.random.randint(-50, high=51)
+                      for y in ploty])
+    rightx = np.array([900 + (y ** 2) * quadratic_coeff + np.random.randint(-50, high=51)
+                       for y in ploty])
+
+    leftx = leftx[::-1]  # Reverse to match top-to-bottom in y
+    rightx = rightx[::-1]  # Reverse to match top-to-bottom in y
+
+    # Fit a second order polynomial to pixel positions in each fake lane line
+    # Fit new polynomials to x,y in world space
+    left_fit_cr = np.polyfit(ploty * ym_per_pix, leftx * xm_per_pix, 2)
+    right_fit_cr = np.polyfit(ploty * ym_per_pix, rightx * xm_per_pix, 2)
+
+    return ploty, left_fit_cr, right_fit_cr
+
+
 def measure_curvature_pixels(ploty, left_fit, right_fit):
     '''
     Calculates the curvature of polynomial functions in pixels.
@@ -439,7 +479,7 @@ def measure_curvature_real():
     '''
     # Define conversions in x and y from pixels space to meters
     ym_per_pix = 30 / 720  # meters per pixel in y dimension
-    xm_per_pix = 3.7 / 700  # meters per pixel in x dimension
+    xm_per_pix = 3.7 / 650  # meters per pixel in x dimension
 
     # Start by generating our fake example data
     # Make sure to feed in your real data instead in your project!
@@ -483,5 +523,26 @@ def region_of_interest(img, vertices):
     masked_image = cv2.bitwise_and(img, mask)
 
     return masked_image
+
+
+def draw_track(undist, warped, Minv, left_fitx, right_fitx, ploty):
+    # Create an image to draw the lines on
+    warp_zero = np.zeros_like(warped).astype(np.uint8)
+    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+
+    # Recast the x and y points into usable format for cv2.fillPoly()
+    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts = np.hstack((pts_left, pts_right))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(color_warp, np.int_([pts]), (0, 255, 0))
+
+    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    newwarp = cv2.warpPerspective(color_warp, Minv, (undist.shape[1], undist.shape[0]))
+    # Combine the result with the original image
+    result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+
+    plt.imshow(result)
 
 
