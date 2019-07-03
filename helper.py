@@ -137,7 +137,6 @@ def mag_thresh(img, is_gray=True, sobel_kernel=3, mag_thresh=(0, 255)):
     return binary_output
 
 
-
 # Define a function that applies Sobel x and y,
 # then computes the direction of the gradient
 # and applies a threshold.
@@ -204,9 +203,9 @@ def find_lane_pixels(binary_warped):
     # Choose the number of sliding windows
     nwindows = 9
     # Set the width of the windows +/- margin
-    margin = 100
+    margin = 45
     # Set minimum number of pixels found to recenter window
-    minpix = 50
+    minpix = 65
 
     # Set height of windows - based on nwindows above and image shape
     window_height = np.int(binary_warped.shape[0] // nwindows)
@@ -319,12 +318,11 @@ def fit_poly(img_shape, leftx, lefty, rightx, righty):
     return left_fitx, right_fitx, ploty
 
 
-def search_around_poly(binary_warped, left_fit, right_fit):
+def search_around_poly(binary_warped, left_fit, right_fit, margin = 45):
     # HYPERPARAMETER
     # Choose the width of the margin around the previous polynomial to search
     # The quiz grader expects 100 here, but feel free to tune on your own!
-    margin = 100
-
+    # margin = 45
 
     # Grab activated pixels
     nonzero = binary_warped.nonzero()
@@ -537,6 +535,52 @@ def draw_track(undist, warped, Minv, left_fitx, right_fitx, ploty):
 
     # Draw the lane onto the warped blank image
     cv2.fillPoly(color_warp, np.int_([pts]), (0, 255, 0))
+
+    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    newwarp = cv2.warpPerspective(color_warp, Minv, (undist.shape[1], undist.shape[0]))
+    # Combine the result with the original image
+    result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+
+    plt.imshow(result)
+
+
+def draw_track_with_lines(undist, warped, Minv, left_fitx, right_fitx, ploty, margin = 25):
+
+    # Create an image to draw the lines on
+    warp_zero = np.zeros_like(warped).astype(np.uint8)
+    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+
+    # Generate a polygon to illustrate the search window area
+    # And recast the x and y points into usable format for cv2.fillPoly()
+    left_line_window1 = np.array([np.transpose(np.vstack([left_fitx - margin, ploty]))])
+    left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx + margin, ploty])))])
+    left_line_pts = np.hstack((left_line_window1, left_line_window2))
+
+    right_line_window1 = np.array([np.transpose(np.vstack([right_fitx - margin, ploty]))])
+    right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx + margin, ploty])))])
+    right_line_pts = np.hstack((right_line_window1, right_line_window2))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(color_warp, np.int_([left_line_pts]), (0, 255, 0))
+    cv2.fillPoly(color_warp, np.int_([right_line_pts]), (0, 255, 0))
+    # result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+
+    # bwn_window_img = np.zeros_like(out_img)
+    left_lane_line_window = np.array([np.flipud(np.transpose(np.vstack([left_fitx + margin, ploty])))])
+    right_lane_line_window = np.array([np.transpose(np.vstack([right_fitx - margin, ploty]))])
+    lane_line_pts = np.hstack((left_lane_line_window, right_lane_line_window))
+
+    cv2.fillPoly(color_warp, np.int_([lane_line_pts]), (255, 0, 0))
+    #result = cv2.addWeighted(result, 1, bwn_window_img, 0.3, 0)
+
+
+    # # Recast the x and y points into usable format for cv2.fillPoly()
+    # pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    # pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    # pts = np.hstack((pts_left, pts_right))
+    #
+    # # Draw the lane onto the warped blank image
+    # cv2.fillPoly(color_warp, np.int_([pts]), (0, 255, 0))
 
     # Warp the blank back to original image space using inverse perspective matrix (Minv)
     newwarp = cv2.warpPerspective(color_warp, Minv, (undist.shape[1], undist.shape[0]))
